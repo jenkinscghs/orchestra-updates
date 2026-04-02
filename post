@@ -1,0 +1,42 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# Fail on error
+set -e
+
+# Require a message
+if [ "$#" -eq 0 ]; then
+  echo "Usage: post Your message here"
+  exit 1
+fi
+
+# Message and timestamp
+MSG="$*"
+TS=$(date -Iseconds)
+
+# Append JSON entry using Python (safer than sed)
+python - <<EOF
+import json, os
+
+fname = "feed.json"
+
+if os.path.exists(fname):
+    with open(fname) as f:
+        data = json.load(f)
+else:
+    data = []
+
+data.append({
+    "ts": "$TS",
+    "body": "$MSG"
+})
+
+with open(fname, "w") as f:
+    json.dump(data, f, indent=2)
+EOF
+
+# Commit and push
+git add feed.json
+git commit -m "Post: $MSG"
+git push
+
+echo "✅ Posted successfully"
