@@ -1,0 +1,20 @@
+name: Notify ntfy on feed update
+
+on:
+  push:
+    paths:
+      - feed.json
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send ntfy notification
+        run: |
+          curl -X POST https://ntfy.sh/osotacghs \
+            -H "Content-Type: application/json" \
+            -d '{
+              "type": "content-updated",
+              "file": "feed.json",
+              "commit": "${{ github.sha }}"
+            }'
