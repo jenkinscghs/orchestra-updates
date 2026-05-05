@@ -7,45 +7,52 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// 🔴 Your actual feed URL
 const FEED_URL =
   "https://raw.githubusercontent.com/jenkinscghs/orchestra-updates/main/feed.json";
 
-// Keep latest feed in memory
 let latestFeed = [];
+
+// helper to fetch feed
+async function fetchFeed() {
+  const res = await fetch(FEED_URL, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Feed fetch failed: ${res.status}`);
+
+  const feed = await res.json();
+  feed.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  latestFeed = feed;
+  return feed;
+}
 
 // health check
 app.get("/health", (req, res) => {
   res.send("OK");
 });
 
-// webhook endpoint
+// webhook (update feed immediately)
 app.post("/github-webhook", async (req, res) => {
-  console.log("✅ GitHub webhook received");
-
   try {
-    const response = await fetch(FEED_URL, { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error(`Feed fetch failed: ${response.status}`);
-    }
-
-    const feed = await response.json();
-
-    // newest first
-    feed.sort((a, b) => new Date(b.ts) - new Date(a.ts));
-    latestFeed = feed;
-
-    console.log(`✅ Feed updated (${feed.length} items)`);
-    res.status(200).send("Feed updated");
+    console.log("✅ Webhook received");
+    await fetchFeed();
+    console.log(`✅ Feed updated (${latestFeed.length} items)`);
+    res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Error updating feed:", err);
-    res.status(500).send("Error updating feed");
+    console.error(err);
+    res.sendStatus(500);
   }
 });
 
-// optional: inspect feed in browser
-app.get("/feed", (req, res) => {
-  res.json(latestFeed);
+// feed endpoint (auto-heals after sleep)
+app.get("/feed", async (req, res) => {
+  try {
+    if (latestFeed.length === 0) {
+      console.log("ℹ️ Feed empty, fetching...");
+      await fetchFeed();
+    }
+    res.json(latestFeed);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load feed" });
+  }
 });
 
 const server = http.createServer(app);
