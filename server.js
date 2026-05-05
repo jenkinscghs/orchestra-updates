@@ -1,84 +1,37 @@
 import express from "express";
-import fetch from "node-fetch";
 import http from "http";
-import { WebSocketServer } from "ws";
 
 const app = express();
+
+// IMPORTANT: GitHub requires JSON parsing
 app.use(express.json());
 
-// 🔴 IMPORTANT: replace these with YOUR actual values
-const FEED_URL =
-  "https://raw.githubusercontent.com/jenkinscghs/orchestra-updates/main/feed.json";
-
-// Render provides the port dynamically
 const PORT = process.env.PORT || 3000;
 
-// Create ONE HTTP server (required for Render + WebSockets)
+// LOG EVERY REQUEST (critical for debugging)
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.url}`);
+  next();
+});
+
+// health check
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
+// webhook endpoint (MUST respond immediately)
+app.post("/github-webhook", (req, res) => {
+  console.log("✅ GitHub webhook received");
+  console.log("Headers:", req.headers);
+  console.log("Body:", JSON.stringify(req.body, null, 2));
+
+  // respond immediately
+  res.status(200).send("Webhook received");
+});
+
+// create server (Render-safe)
 const server = http.createServer(app);
 
-// Attach WebSocket server to the SAME HTTP server
-const wss = new WebSocketServer({ server });
-
-let latestFeed = [];
-
-// --- WebSocket handling ---
-wss.on("connection", ws => {
-  console.log("WebSocket client connected");
-
-  // Always send the latest feed immediately
-  if (latestFeed.length > 0) {
-    ws.send(JSON.stringify(latestFeed));
-  }
-
-  ws.on("close", () => {
-    console.log("WebSocket client disconnected");
-  });
-});
-
-// --- Helper: fetch feed + broadcast ---
-async function updateFeed() {
-  console.log("Fetching feed…");
-
-  const res = await fetch(FEED_URL, { cache: "no-store" });
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch feed: ${res.status}`);
-  }
-
-  const feed = await res.json();
-
-  // newest first
-  feed.sort((a, b) => new Date(b.ts) - new Date(a.ts));
-
-  latestFeed = feed;
-
-  const payload = JSON.stringify(feed);
-
-  // Broadcast to all connected clients
-  wss.clients.forEach(client => {
-    if (client.readyState === 1) {
-      client.send(payload);
-    }
-  });
-}
-
-// --- GitHub webhook ---
-app.post("/github-webhook", async (req, res) => {
-  try {
-    await updateFeed();
-    res.sendStatus(200);
-  } catch (err) {
-    console.error(err);
-    res.sendStatus(500);
-  }
-});
-
-// --- Health check ---
-app.get("/health", (req, res) => {
-  res.send("OK");
-});
-
-// --- Start server ---
 server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`✅ Server listening on port ${PORT}`);
 });
