@@ -1,35 +1,53 @@
 import express from "express";
 import http from "http";
+import fetch from "node-fetch";
 
 const app = express();
-
-// IMPORTANT: GitHub requires JSON parsing
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// LOG EVERY REQUEST (critical for debugging)
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
-});
+// 🔴 Your actual feed URL
+const FEED_URL =
+  "https://raw.githubusercontent.com/jenkinscghs/orchestra-updates/main/feed.json";
+
+// Keep latest feed in memory
+let latestFeed = [];
 
 // health check
 app.get("/health", (req, res) => {
-  res.status(200).send("OK");
+  res.send("OK");
 });
 
-// webhook endpoint (MUST respond immediately)
-app.post("/github-webhook", (req, res) => {
+// webhook endpoint
+app.post("/github-webhook", async (req, res) => {
   console.log("✅ GitHub webhook received");
-  console.log("Headers:", req.headers);
-  console.log("Body:", JSON.stringify(req.body, null, 2));
 
-  // respond immediately
-  res.status(200).send("Webhook received");
+  try {
+    const response = await fetch(FEED_URL, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`Feed fetch failed: ${response.status}`);
+    }
+
+    const feed = await response.json();
+
+    // newest first
+    feed.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    latestFeed = feed;
+
+    console.log(`✅ Feed updated (${feed.length} items)`);
+    res.status(200).send("Feed updated");
+  } catch (err) {
+    console.error("❌ Error updating feed:", err);
+    res.status(500).send("Error updating feed");
+  }
 });
 
-// create server (Render-safe)
+// optional: inspect feed in browser
+app.get("/feed", (req, res) => {
+  res.json(latestFeed);
+});
+
 const server = http.createServer(app);
 
 server.listen(PORT, () => {
