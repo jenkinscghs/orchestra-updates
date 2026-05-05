@@ -12,7 +12,13 @@ const FEED_URL =
 let latestFeed = [];
 
 // WebSocket server
-const wss = new WebSocketServer({ port: 8080 });
+
+const server = app.listen(PORT, () => {
+  console.log(`HTTP server listening on port ${PORT}`);
+});
+
+const wss = new WebSocketServer({ server });
+
 const clients = new Set();
 
 wss.on("connection", ws => {
