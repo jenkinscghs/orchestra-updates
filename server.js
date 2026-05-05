@@ -15,13 +15,17 @@ app.use((req, res, next) => {
 const PORT = process.env.PORT || 3000;
 
 const FEED_URL =
-  "https://raw.githubusercontent.com/jenkinscghs/orchestra-updates/main/feed.json";
+  "https://raw.githubusercontent.com/jenkinscghs/orchestra-updates/main/feed.json?cache_bust=";
+
 
 let latestFeed = [];
 
 // helper to fetch feed
+
 async function fetchFeed() {
-  const res = await fetch(FEED_URL, { cache: "no-store" });
+  const url = FEED_URL + Date.now();
+
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Feed fetch failed: ${res.status}`);
 
   const feed = await res.json();
@@ -29,6 +33,7 @@ async function fetchFeed() {
   latestFeed = feed;
   return feed;
 }
+
 
 // health check
 app.get("/health", (req, res) => {
