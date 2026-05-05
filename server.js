@@ -14,8 +14,8 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
-const FEED_URL =
-  "https://raw.githubusercontent.com/jenkinscghs/orchestra-updates/main/feed.json?cache_bust=";
+const FEED_API_URL =
+  "https://api.github.com/repos/jenkinscghs/orchestra-updates/contents/feed.json";
 
 
 let latestFeed = [];
@@ -23,16 +23,23 @@ let latestFeed = [];
 // helper to fetch feed
 
 async function fetchFeed() {
-  const url = FEED_URL + Date.now();
+  const res = await fetch(FEED_API_URL, {
+    headers: {
+      "Accept": "application/vnd.github.v3.raw",
+      "User-Agent": "orchestra-updates-feed"
+    }
+  });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Feed fetch failed: ${res.status}`);
+  if (!res.ok) {
+    throw new Error(`Feed fetch failed: ${res.status}`);
+  }
 
   const feed = await res.json();
   feed.sort((a, b) => new Date(b.ts) - new Date(a.ts));
   latestFeed = feed;
   return feed;
 }
+``
 
 
 // health check
