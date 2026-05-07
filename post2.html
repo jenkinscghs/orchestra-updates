@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <title>Orchestra Updates</title>
+
+  <style>
+    :root {
+      --bg: #f7f7f8;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --accent: #2563eb;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+
+li img {
+  margin-top: 0.5rem;
+  max-width: 100%;
+  max-height: 191px;
+  border-radius: 8px;
+  display: block;
+}
+
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin: 0 0 1rem;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    li {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.9rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    time {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+
+    p {
+      margin: 0;
+      font-size: 1rem;
+      word-wrap: break-word;
+    }
+
+    /* Mobile-friendly tweaks */
+    @media (max-width: 480px) {
+      .container {
+        padding: 0.75rem;
+      }
+
+      li {
+        padding: 0.8rem;
+      }
+
+      p {
+        font-size: 0.95rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  
+<div class="container">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <h1>Orchestra SOTA@CGHS Updates</h1>
+    <button id="soundToggle"
+            aria-label="Toggle sound"
+            style="
+              font-size: 1.1rem;
+              background: none;
+              border: none;
+              cursor: pointer;
+            ">
+      🔕
+    </button>
+  </div>
+
+  <ul id="feed"></ul>
+</div>
+
+
+  <script>
+    const FEED_URL = "https://orchestra-updates.onrender.com/feed";
+    const FEED_LIMIT = 10;
+    const feedEl = document.getElementById("feed");
+    const soundToggle = document.getElementById("soundToggle");
+
+
+let soundEnabled = false;
+let lastSeenTimestamp = null;
+let audioCtx = null;
+let audioUnlocked = false;
+let renderedTimestamp = null;
+
+function unlockAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+
+  audioUnlocked = true;
+
+  // Optional: remove listeners after unlock
+  document.removeEventListener("click", unlockAudio);
+  document.removeEventListener("touchstart", unlockAudio);
+}
+
+// Unlock on first interaction
+document.addEventListener("click", unlockAudio);
+document.addEventListener("touchstart", unlockAudio);
+
+soundToggle.addEventListener("click", () => {
+  soundEnabled = !soundEnabled;
+  soundToggle.textContent = soundEnabled ? "🔔" : "🔕";
+
+  // Ensure audio is unlocked when user opts in
+  unlockAudio();
+});
+
+
+
+function playChime() {
+  if (!audioUnlocked || !soundEnabled) return;
+
+  const now = audioCtx.currentTime;
+
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc1.frequency.value = 880;
+  osc2.frequency.value = 1320;
+  osc1.type = "sine";
+  osc2.type = "sine";
+
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(0.25, now + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+
+  osc1.connect(gain);
+  osc2.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc1.start(now);
+  osc2.start(now);
+  osc1.stop(now + 0.8);
+  osc2.stop(now + 0.8);
+}
+   async function loadFeed() {
+  try {
+    const res = await fetch(
+      FEED_URL + "?t=" + Date.now(),
+      { cache: "no-store" }
+    );
+
+    const items = await res.json();
+
+    const latest = items
+      .sort((a, b) => new Date(b.ts) - new Date(a.ts))
+      .slice(0, FEED_LIMIT);
+
+    if (latest.length === 0) return;
+
+    const newestTs = latest[0].ts;
+
+    // 🔔 Chime for new post
+    if (lastSeenTimestamp && newestTs !== lastSeenTimestamp) {
+      playChime();
+    }
+    lastSeenTimestamp = newestTs;
+
+    // ✅ Only re-render if feed changed
+    if (newestTs === renderedTimestamp) return;
+
+    renderedTimestamp = newestTs;
+
+    // Re-render once
+    feedEl.innerHTML = "";
+
+  latest.forEach(item => {
+  const li = document.createElement("li");
+
+  const body = escapeHtml(item.body);
+  const time = formatTime(item.ts);
+
+  let imageHtml = "";
+  if (item.image) {
+    imageHtml = `<img src="${item.image}" alt="" loading="lazy">`;
+  }
+
+  li.innerHTML = `
+    <time>${time}</time>
+    <p>${body}</p>
+    ${imageHtml}
+  `;
+
+  feedEl.appendChild(li);
+});
+
+  } catch (err) {
+    console.error("Failed to load feed:", err);
+  }
+}
+
+
+
+    function formatTime(ts) {
+      const d = new Date(ts);
+      return d.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      });
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, m =>
+        ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;"
+        }[m])
+      );
+    }
+
+    loadFeed();
+    setInterval(loadFeed, 5000);
+  </script>
+</body>
+</html>
