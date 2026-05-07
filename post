@@ -1,19 +1,33 @@
 #!/data/data/com.termux/files/usr/bin/bash
 cd "$HOME/.ssh/orchestra-updates"
+
 # Fail on error
 set -e
 
 # Require a message
 if [ "$#" -eq 0 ]; then
-  echo "Usage: post Your message here"
+  echo "Usage: post Your message here [| image_url]"
   exit 1
 fi
 
-# Message and timestamp
-MSG="$*"
+# Raw input
+RAW="$*"
+
+# Split body and optional image URL
+if [[ "$RAW" == *"|"* ]]; then
+  BODY="${RAW%%|*}"
+  IMAGE="${RAW#*|}"
+  BODY="$(echo "$BODY" | xargs)"
+  IMAGE="$(echo "$IMAGE" | xargs)"
+else
+  BODY="$RAW"
+  IMAGE=""
+fi
+
+# Timestamp
 TS=$(date -Iseconds)
 
-# Append JSON entry using Python (safer than sed)
+# Append JSON entry using Python (safe + clean)
 python - <<EOF
 import json, os
 
@@ -25,10 +39,15 @@ if os.path.exists(fname):
 else:
     data = []
 
-data.append({
+entry = {
     "ts": "$TS",
-    "body": "$MSG"
-})
+    "body": "$BODY"
+}
+
+if "$IMAGE":
+    entry["image"] = "$IMAGE"
+
+data.append(entry)
 
 with open(fname, "w") as f:
     json.dump(data, f, indent=2)
@@ -36,7 +55,7 @@ EOF
 
 # Commit and push
 git add feed.json
-git commit -m "Post: $MSG"
+git commit -m "Post: $BODY"
 git push
 
 echo "✅ Posted successfully"
